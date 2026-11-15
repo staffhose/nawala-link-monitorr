@@ -1,0 +1,4 @@
+# Satu URL per baris. Gunakan https:// atau http://
+# Ganti contoh di bawah dengan daftar website Anda.
+https://example.com
+https://www.wikipedia.org

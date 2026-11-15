@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nawala Link Monitor</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--ink:#172033;--muted:#687386;--line:#e6eaf1;--green:#138a55;--red:#c53b42;--amber:#a66a00;--blue:#315bd6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+header{background:#14213d;color:#fff;padding:24px max(20px,calc((100% - 1120px)/2))}
+header h1{margin:0;font-size:24px}header p{margin:5px 0 0;color:#cbd5e1}
+main{max-width:1120px;margin:24px auto;padding:0 18px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px;box-shadow:0 2px 8px #17203308}
+.metric{font-size:28px;font-weight:750}.muted{color:var(--muted);font-size:13px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:14px}
+input{padding:10px 12px;border:1px solid var(--line);border-radius:9px;min-width:220px;font:inherit}
+button{border:0;border-radius:9px;background:var(--blue);color:#fff;padding:10px 15px;font-weight:650;cursor:pointer}
+button.secondary{background:#e9eefc;color:#2448b0}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.status{display:inline-block;border-radius:99px;padding:4px 9px;font-size:12px;font-weight:700;white-space:nowrap}
+.ok{background:#e4f6ed;color:#137348}.bad{background:#fde9e9;color:#a92730}.warn{background:#fff3d8;color:#895900}.unknown{background:#edf0f5;color:#566174}
+.url{overflow-wrap:anywhere}.empty{text-align:center;padding:30px;color:var(--muted)}
+.note{margin-top:16px;padding:14px;border-radius:10px;background:#fff8e8;color:#725000;font-size:13px}
+@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}table{font-size:13px}th,td{padding:9px 6px}.hide-mobile{display:none}}
+</style></head>
+<body>
+<header><h1>NAWALA LINK MONITOR</h1><p>Pemantauan otomatis website setiap 24 jam</p></header>
+<main>
+ <div class="cards">
+  <div class="card"><div class="metric" id="total">—</div><div class="muted">Total link</div></div>
+  <div class="card"><div class="metric" id="normal">—</div><div class="muted">Dapat diakses</div></div>
+  <div class="card"><div class="metric" id="suspect">—</div><div class="muted">Indikasi pemblokiran</div></div>
+  <div class="card"><div class="metric" id="failed">—</div><div class="muted">Tidak dapat diperiksa</div></div>
+ </div>
+ <section class="panel">
+  <div class="toolbar"><div><strong>Hasil pemeriksaan</strong><div class="muted" id="updated">Memuat laporan…</div></div>
+  <div><input id="filter" placeholder="Cari domain…" aria-label="Cari domain"><button class="secondary" onclick="loadReport()">Muat ulang</button></div></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Website</th><th>Status</th><th class="hide-mobile">HTTP</th><th class="hide-mobile">Waktu respons</th><th>Waktu cek</th><th>Catatan</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="empty">Memuat data…</td></tr></tbody></table></div>
+ </section>
+ <div class="note"><b>Penting:</b> “Indikasi pemblokiran” adalah hasil deteksi otomatis berdasarkan respons dan ciri halaman blokir, bukan verifikasi resmi dari Nawala/Kominfo. Gangguan server, DNS, firewall, atau koneksi juga dapat menyebabkan website tidak terbuka. Lakukan pemeriksaan manual sebelum mengambil tindakan.</div>
+ <p class="muted">Pemeriksaan terjadwal dijalankan oleh GitHub Actions. Dashboard ini hanya menampilkan laporan terakhir yang tersimpan.</p>
+</main>
+<script>
+const fmt = v => v ? new Date(v).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}) : '—';
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function loadReport(){
+ const rows=document.getElementById('rows'); rows.innerHTML='<tr><td colspan="6" class="empty">Memuat data…</td></tr>';
+ try{
+  const r=await fetch('./report.json?t='+Date.now(),{cache:'no-store'});
+  if(!r.ok) throw new Error('Laporan belum tersedia. Jalankan workflow pemeriksaan terlebih dahulu.');
+  const data=await r.json(), items=data.results||[];
+  document.getElementById('total').textContent=items.length;
+  document.getElementById('normal').textContent=items.filter(x=>x.status==='normal').length;
+  document.getElementById('suspect').textContent=items.filter(x=>x.status==='suspected_block').length;
+  document.getElementById('failed').textContent=items.filter(x=>!['normal','suspected_block'].includes(x.status)).length;
+  document.getElementById('updated').textContent='Pemeriksaan terakhir: '+fmt(data.checked_at)+' · Zona waktu laporan: UTC';
+  const draw=()=>{
+   const q=document.getElementById('filter').value.toLowerCase();
+   const shown=items.filter(x=>x.url.toLowerCase().includes(q));
+   rows.innerHTML=shown.length?shown.map(x=>{
+    let cls=x.status==='normal'?'ok':x.status==='suspected_block'?'bad':x.status==='unreachable'?'warn':'unknown';
+    let label=x.status==='normal'?'Dapat diakses':x.status==='suspected_block'?'Indikasi blokir':x.status==='unreachable'?'Tidak dapat diakses':'Gagal diperiksa';
+    return `<tr><td class="url">${esc(x.url)}</td><td><span class="status ${cls}">${label}</span></td><td class="hide-mobile">${esc(x.http_status??'—')}</td><td class="hide-mobile">${esc(x.response_ms??'—')} ms</td><td>${fmt(x.checked_at)}</td><td>${esc(x.note||'—')}</td></tr>`;
+   }).join(''):'<tr><td colspan="6" class="empty">Tidak ada link yang cocok.</td></tr>';
+  };
+  document.getElementById('filter').oninput=draw; draw();
+ }catch(e){rows.innerHTML=`<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;}
+}
+loadReport();
+</script></body></html>
